@@ -10,15 +10,71 @@ from time import time
 #from pprint import pprint
 from autolog import *
 from fuse import FUSE, FuseOSError, Operations, LoggingMixIn
-
+from xmlrpclib import Binary
+import sys, pickle, xmlrpclib
 if not hasattr(__builtins__, 'bytes'):
     bytes = str
+
+
+
+
+class HtProxy:
+  """ Wrapper functions so the FS doesn't need to worry about HT primitives."""
+  # A hashtable supporting atomic operations, i.e., retrieval and setting
+  # must be done in different operations
+  def __init__(self, port):
+    self.server = xmlrpclib.ServerProxy("http://localhost:" + port)
+  # Retrieves a value from the SimpleHT, returns KeyError, like dictionary, if
+  # there is no entry in the SimpleHT
+  
+  def __getitem__(self, key):
+    rv = self.get(key)
+    if rv == None:
+      raise KeyError()
+    return pickle.loads(rv)
+   
+  # Stores a value in the SimpleHT
+  def __setitem__(self, key, value):
+    self.put(key, pickle.dumps(value))
+  
+  # Sets the TTL for a key in the SimpleHT to 0, effectively deleting it
+  def __delitem__(self, key):
+    self.put(key, "", 0)
+      
+  # Retrieves a value from the DHT, if the results is non-null return true,
+  # otherwise false
+  def __contains__(self, key):
+    return self.get(key) != None
+
+  def get(self, key):
+    
+    res = self.server.get(Binary(key))
+    if "value" in res:
+      return res["value"].data
+    else:
+      return None
+
+  def put(self, key, val, ttl=10000):
+    
+    return self.server.put(Binary(key), Binary(val), ttl)
+
+  #def read_file(self, filename):
+  #  return self.rpc.read_file(Binary(filename))
+
+  #def write_file(self, filename):
+  #  return self.rpc.write_file(Binary(filename))
+  def __getattribute__(self, name):
+        returned = object.__getattribute__(self, name)
+        if inspect.isfunction(returned) or inspect.ismethod(returned):
+            print 'in HtProxy called: ', returned.__name__
+        return returned
+HtProxy = logclass(HtProxy, logMatch='get|put|__init__|__getitem__|__setitem__|__delitem__|__contains__')
 
 class Memory(LoggingMixIn, Operations):
     'Example memory filesystem. Supports only one level of files.'
 
-    def __init__(self):
-        self.files = {}
+    def __init__(self,ht):
+        self.files = ht
         self.data = defaultdict(bytes)
         self.fd = 0
         now = time()
@@ -161,9 +217,11 @@ class Memory(LoggingMixIn, Operations):
 Memory = logclass(Memory, logMatch='__init__|chmod|chown|create|getattr|getxattr|listxattr|mkdir|open|read|readdir|readlink|removexattr|rename|rmdir|setxattr|statfs|symlink|truncate|unlink|utimens|write')
 
 if __name__ == '__main__':
-    if len(argv) != 2:
-        print('usage: %s <mountpoint>' % argv[0])
-        exit(1)
-    logging.basicConfig()
-    logging.getLogger().setLevel(logging.DEBUG)
-    fuse = FUSE(Memory(), argv[1], foreground=True)
+  if len(argv) < 3:
+    print 'usage: %s <mountpoint> <remote hashtable port>' % argv[0]
+    exit(1)
+  port = argv[2]
+  logging.basicConfig()
+  logging.getLogger().setLevel(logging.DEBUG)
+  
+  fuse = FUSE(Memory(HtProxy(port)), argv[1], foreground=True)

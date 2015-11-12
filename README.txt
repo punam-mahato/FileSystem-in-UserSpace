@@ -1,7 +1,8 @@
 fusepy: a Python module that provides a simple interface to FUSE
 Link: https://github.com/terencehonles/fusepy
 Supports file operations: cd , ls, mkdir, rmdir, echo, touch, cat, cp, mv, rm etc.
-======
+
+-------------------------------------
 
 Given an in-memory one level filesystem: memory.py
 
