@@ -2,9 +2,6 @@
 
 #one level for single server //working
 """
-Author: David Wolinsky
-Version: 0.01
-
 A file system that interacts with an xmlrpc HT.
 """
 import logging
